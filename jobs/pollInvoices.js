@@ -1,3 +1,4 @@
+const { getSupabase } = require("../db/supabaseClient");
 const { fetchSalesInvoices } = require("../services/invoiceService");
 const { enrichInvoicesWithDebtorEmail } = require("../services/accountService");
 const logger = require("../lib/logger");
@@ -12,6 +13,21 @@ const COLLECT_PAYMENT_TIMEOUT_MS = Number(process.env.COLLECT_PAYMENT_TIMEOUT_MS
 /**
  * Call client backend to trigger payment
  */
+async function hasActiveSepaMandate(email) {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("customers")
+    .select("sepa_active,stripe_payment_method")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Supabase SEPA check failed: ${error.message}`);
+  }
+
+  return Boolean(data && data.sepa_active === true && data.stripe_payment_method);
+}
 async function triggerPayment(payload) {
     if (!COLLECT_PAYMENT_URL) {
         throw new Error("Missing COLLECT_PAYMENT_URL");
@@ -166,10 +182,21 @@ async function pollInvoices() {
             if (EXACT_DEBUG_LOGS) {
                 logger.info("Collect payment request payload (dev only)", { payload });
             }
-            await triggerPayment(payload);
+            const sepaActive = await hasActiveSepaMandate(inv.debtor_email);
 
-            logger.info("Invoice payment triggered", {
-                invoice: inv.invoice_number
+if (!sepaActive) {
+    logger.info("Skipping invoice because customer has no active SEPA mandate", {
+        invoice: inv.invoice_number,
+        email: inv.debtor_email
+    });
+    continue;
+}
+
+await triggerPayment(payload);
+
+logger.info("Invoice payment triggered", {
+    invoice: inv.invoice_number
+});
             });
         } catch (err) {
             logger.error("Failed to process invoice", {
