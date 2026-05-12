@@ -6,7 +6,7 @@ It:
 Authenticates with Exact Online via OAuth2
 Stores OAuth session/tokens in Supabase
 Polls Exact invoices every 5 minutes
-Selects invoices in the last 7 days (Created or Modified)
+Selects invoices on or after go-live date (`SEPA_START_DATE`) using `Created`/`Modified`/`InvoiceDate`
 Filters to finalized invoices (Status = 50)
 Enriches invoices with debtor email from Exact crm/Accounts
 Calls your collect-payment endpoint with an idempotency key
@@ -27,12 +27,12 @@ EXACT_BASE_URL (usually https://start.exactonline.nl)
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
 COLLECT_PAYMENT_URL
+SEPA_START_DATE (format: YYYY-MM-DD, go-live cutoff)
 Optional:
 
 COLLECT_PAYMENT_TIMEOUT_MS (default: 15000)
 EXACT_MOCK (1 for local mock fixtures, 0 for live Exact)
 EXACT_DEBUG_LOGS (1 enables Exact debug logs)
-LOG_DEBUG=1 or LOG_LEVEL=debug (to show logger.debug output)
 Supabase Setup
 Run SQL from:
 
@@ -51,8 +51,8 @@ Confirm callback success and Supabase row creation.
 How Processing Works
 Every 5 minutes:
 
-Fetch invoices from Exact (last 7 days by Created OR Modified)
-Apply local date safety filter (same 7-day rule)
+Fetch invoices from Exact on/after `SEPA_START_DATE` (`Created` OR `Modified` OR `InvoiceDate`)
+Apply local date safety filter using the same `SEPA_START_DATE` rule
 Enrich with debtor email
 Keep only processable invoices:
 finalized (Status = 50)
@@ -92,7 +92,7 @@ Troubleshooting
 No invoices processed
 Check logs for:
 fetched count
-local 7-day filtered count
+SEPA_START_DATE filtered count
 processable count
 OAuth errors
 Verify REDIRECT_URI match between env and Exact app
